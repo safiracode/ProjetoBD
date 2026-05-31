@@ -1,18 +1,57 @@
 # Estrutura do Projeto
 
-Este documento explica, de forma geral, o papel de cada arquivo da API.
+Este documento explica, de forma geral, o papel de cada parte da API do Sistema Hoteleiro.
 
-A aplicação foi organizada em arquivos separados para deixar a conexão com o banco, os modelos, os schemas, as operações CRUD e as rotas em lugares diferentes. Isso facilita a leitura e a manutenção do código.
+A aplicação foi organizada em módulos separados para deixar a conexão com o banco, os modelos, os schemas, as operações CRUD e as rotas em lugares diferentes. Isso facilita a leitura e a manutenção do código.
 
 ## Visão geral
 
 ```txt
 app/
 ├── database.py
-├── models.py
-├── schemas.py
-├── crud.py
-└── main.py
+├── main.py
+├── models/
+│   ├── __init__.py
+│   ├── endereco.py
+│   ├── pessoa.py
+│   ├── funcionario.py
+│   ├── dependente.py
+│   ├── diretor.py
+│   ├── gerente.py
+│   ├── pessoa_operacional.py
+│   ├── cozinheiro.py
+│   ├── camareiro.py
+│   ├── auxiliar_servicos_gerais.py
+│   ├── recepcionista.py
+│   ├── idioma_recepcionista.py
+│   ├── reserva.py
+│   ├── titular_financeiro.py
+│   ├── hospede.py
+│   ├── empresa.py
+│   ├── pagamento.py
+│   ├── categoria_quarto.py
+│   ├── quarto.py
+│   ├── reserva_quarto.py
+│   ├── item.py
+│   └── consome.py
+├── schemas/
+│   ├── __init__.py
+│   ├── base.py
+│   └── (um arquivo por entidade)
+├── crud/
+│   ├── __init__.py
+│   ├── base.py
+│   └── (um arquivo por entidade)
+└── routes/
+    ├── __init__.py
+    ├── helpers.py
+    └── (um arquivo por entidade)
+sql/
+└── 01_create_normalized_schema.sql
+DOCS/
+├── DECISOES_DE_FIDELIDADE.md
+├── ENTRADAS_DE_TESTE.md
+└── NORMALIZACAO_E_ORDEM.md
 ```
 
 ## `database.py`
@@ -21,98 +60,112 @@ Arquivo responsável pela conexão com o banco de dados.
 
 Ele carrega a variável `DATABASE_URL` do arquivo `.env`, cria o `engine` do SQLAlchemy e define a sessão usada para acessar o PostgreSQL.
 
-Também possui a função `get_db()`, que abre uma sessão com o banco para cada requisição e fecha essa sessão ao final.
+Também possui a função `get_db()`, que abre uma sessão com o banco para cada requisição e fecha essa sessão ao final. A função `check_database_connection()` é utilizada pela rota `/health` para verificar a conectividade com o banco.
 
-Em resumo, esse arquivo cuida da parte de infraestrutura da conexão com o banco.
+Para ambientes com Supabase, o módulo adiciona automaticamente `sslmode=require` se necessário.
 
-## `models.py`
+## `models/`
 
-Arquivo responsável por representar as tabelas do banco em classes Python.
+Diretório que contém as representações das tabelas do banco em classes Python usando SQLAlchemy.
 
-Nele aparecem classes como:
+Cada arquivo corresponde a uma tabela do PostgreSQL. As classes definidas são:
 
-- `Endereco`
-- `Pessoa`
-- `CategoriaQuarto`
-- `Quarto`
-- `Reserva`
-- `ReservaQuarto`
+- `Endereco` — dados de endereço separados por normalização
+- `Pessoa` — cadastro unificado de pessoas (com propriedade calculada `idade`)
+- `Funcionario` — especialização de pessoa com matrícula, cargo, salário
+- `Dependente` — dependentes de funcionários
+- `Diretor` — especialização de funcionário com percentual de participação
+- `Gerente` — especialização de funcionário com certificação de gestão
+- `PessoaOperacional` — equipes operacionais gerenciadas por gerentes
+- `Cozinheiro` — especialização com certificação gastronômica
+- `Camareiro` — especialização com velocidade de troca de lençóis
+- `AuxiliarServicosGerais` — especialização com área de atuação
+- `Recepcionista` — especialização com turno, conhecimento do sistema e idiomas
+- `IdiomaRecepcionista` — idiomas fluentes dos recepcionistas (tabela `idiomas_rec`)
+- `Reserva` — estadias com data de entrada/saída, quantidade de pessoas, status
+- `TitularFinanceiro` — responsável financeiro da reserva
+- `Hospede` — especialização de pessoa com e-mail
+- `Empresa` — empresa parceira com CNPJ, razão social, telefone
+- `Pagamento` — registros de pagamento com tipo, valor, data
+- `CategoriaQuarto` — tipo, capacidade máxima e valor da diária
+- `Quarto` — número, tipo e status do quarto
+- `ReservaQuarto` — tabela associativa entre reservas e quartos
+- `Item` — itens vendidos pelo hotel com código, descrição e valor
+- `Consome` — consumo de itens por reserva com chave composta (reserva + item + data + hora)
 
-Cada classe representa uma tabela do PostgreSQL. Os campos das classes representam as colunas das tabelas.
+Todos os modelos seguem fielmente o script SQL normalizado em `sql/01_create_normalized_schema.sql`.
 
-Nesta versão da API, o CRUD implementado é apenas para `Quarto`, mas o arquivo ainda mantém outras classes porque elas fazem parte da modelagem geral do banco.
+## `schemas/`
 
-Um ponto importante é que `Quarto` se relaciona com `CategoriaQuarto`, pois o tipo do quarto precisa existir na tabela de categorias.
+Diretório que define os formatos de entrada e saída da API usando Pydantic.
 
-## `schemas.py`
+Cada entidade possui schemas para:
 
-Arquivo responsável por definir os formatos de entrada e saída da API.
+- `*Create` — usado para criar registros
+- `*Update` — usado para atualizar registros (campos opcionais)
+- `*Response` — usado para definir como o registro será retornado pela API
 
-Ele usa Pydantic para validar os dados recebidos nas requisições e organizar os dados retornados nas respostas.
+Todos herdam de `ORMBase` (definido em `base.py`), que configura `from_attributes=True` para compatibilidade entre SQLAlchemy e Pydantic.
 
-Nesta versão, existem schemas para:
+Schemas com lógica especial:
 
-- `Endereco`
-- `CategoriaQuarto`
-- `Quarto`
+- `PessoaCreate` aceita endereço embutido ou `id_endereco`
+- `HospedeCreate` aceita pessoa aninhada caso a pessoa ainda não exista
+- `ReservaCreate` aceita lista de quartos para vínculo automático
 
-Apesar de existirem schemas de endereço e categoria, as rotas expostas atualmente são apenas de quartos.
+## `crud/`
 
-Os principais schemas usados nas rotas são:
+Diretório responsável pelas operações feitas diretamente no banco.
 
-- `QuartoCreate`: usado para criar um quarto;
-- `QuartoUpdate`: usado para atualizar um quarto;
-- `QuartoResponse`: usado para definir como o quarto será retornado pela API.
+Cada arquivo contém funções para listar, buscar, criar, atualizar e deletar registros da entidade correspondente. O arquivo `base.py` fornece funções genéricas reutilizáveis (`apply_updates`, `create_instance`, `list_all`, `get_by_pk`, `update_by_pk`, `delete_by_pk`).
 
-## `crud.py`
+Validações de integridade implementadas nos CRUDs:
 
-Arquivo responsável pelas operações feitas diretamente no banco.
+- Verificação de existência de FKs antes de criação (ex: categoria antes de quarto, pessoa antes de funcionário)
+- Proteção contra deleção de registros com vínculos ativos (ex: pessoa vinculada a funcionário/hóspede, funcionário com especializações/dependentes, reserva com titular/consumo)
+- Validação de regras de negócio (ex: data de saída posterior à entrada, quantidade de pessoas positiva)
 
-Nesta versão, ele possui funções para:
+## `routes/`
 
-- listar quartos;
-- buscar quarto por número;
-- criar quarto;
-- atualizar quarto;
-- deletar quarto.
+Diretório que define as rotas da API FastAPI.
 
-Antes de criar um quarto, o código verifica se a categoria informada existe em `categoria_quarto`. Isso evita cadastrar quartos com tipos inválidos.
+Cada arquivo cria um `APIRouter` com as rotas CRUD de uma entidade. O arquivo `helpers.py` fornece funções utilitárias `not_found()` e `bad_request()` para padronizar respostas de erro.
 
-Esse arquivo separa a lógica de acesso ao banco das rotas da API.
+### Rotas disponíveis
+
+| Prefixo | Entidade | Métodos |
+|---|---|---|
+| `/pessoas` | Pessoa | GET, POST, PUT, DELETE |
+| `/enderecos` | Endereço | GET, POST, PUT, DELETE |
+| `/funcionarios` | Funcionário | GET, POST, PUT, DELETE |
+| `/dependentes` | Dependente | GET, POST, PUT, DELETE |
+| `/diretores` | Diretor | GET, POST, PUT, DELETE |
+| `/gerentes` | Gerente | GET, POST, PUT, DELETE |
+| `/equipes-operacionais` | Equipe Operacional | GET, POST, PUT, DELETE |
+| `/cozinheiros` | Cozinheiro | GET, POST, PUT, DELETE |
+| `/camareiros` | Camareiro | GET, POST, PUT, DELETE |
+| `/auxiliares-servicos-gerais` | Auxiliar de Serviços Gerais | GET, POST, PUT, DELETE |
+| `/recepcionistas` | Recepcionista | GET, POST, PUT, DELETE |
+| `/idiomas-recepcionista` | Idioma de Recepcionista | GET, POST, DELETE |
+| `/reservas` | Reserva | GET, POST, PUT, DELETE |
+| `/titulares-financeiros` | Titular Financeiro | GET, POST, PUT, DELETE |
+| `/hospedes` | Hóspede | GET, POST, PUT, DELETE |
+| `/empresas` | Empresa | GET, POST, PUT, DELETE |
+| `/pagamentos` | Pagamento | GET, POST, PUT, DELETE |
+| `/categorias-quarto` | Categoria de Quarto | GET, POST, PUT, DELETE |
+| `/quartos` | Quarto | GET, POST, PUT, DELETE |
+| `/reservas-quartos` | Reserva-Quarto | GET, POST, DELETE |
+| `/itens` | Item | GET, POST, PUT, DELETE |
+| `/consumos` | Consumo | GET, POST, PUT, DELETE |
 
 ## `main.py`
 
 Arquivo principal da aplicação FastAPI.
 
-Ele cria a API e define as rotas disponíveis.
+Ele cria a API com título, descrição e versão, e registra todos os routers das 22 entidades. Também define duas rotas internas:
 
-Nesta versão, as rotas implementadas são:
-
-- `GET /`
-- `GET /quartos`
-- `GET /quartos/{numero}`
-- `POST /quartos`
-- `PUT /quartos/{numero}`
-- `DELETE /quartos/{numero}`
-
-As rotas recebem a requisição, usam os schemas para validar os dados e chamam as funções do `crud.py` para acessar o banco.
-
-Também são tratados erros como quarto não encontrado e categoria de quarto inexistente.
-
-## Análise da versão atual
-
-A versão atual está coerente com a proposta de deixar apenas o CRUD de quartos.
-
-O `main.py` expõe somente rotas relacionadas a quartos, e o `crud.py` também possui apenas funções dessa entidade. Isso deixa claro que a parte de reservas foi retirada da API atual.
-
-No entanto, o `models.py` ainda mantém as classes `Reserva` e `ReservaQuarto`. Isso não impede o funcionamento, mas pode gerar dúvida para quem for ler o projeto. Existem duas opções:
-
-1. manter essas classes porque elas representam tabelas reais do banco e podem ser usadas depois;
-2. remover temporariamente essas classes se a ideia for deixar o projeto focado apenas em quartos.
-
-Se outra pessoa vai implementar a parte de reservas, faz sentido manter essas classes ou deixar uma observação no README explicando que elas ainda não possuem rotas.
-
-Também existem schemas de `Endereco` e `CategoriaQuarto`, mas ainda não há rotas para criar, listar ou atualizar essas entidades. Isso não é necessariamente erro, mas indica que esses schemas estão preparados para uma possível expansão futura.
+- `GET /` — verifica se a API está funcionando
+- `GET /health` — verifica a conexão com o banco de dados
 
 ## Fluxo da aplicação
 
@@ -121,21 +174,22 @@ De forma simples, o fluxo funciona assim:
 ```txt
 main.py recebe a requisição
 ↓
-schemas.py valida os dados
+schemas/ valida os dados de entrada
 ↓
-crud.py executa a ação no banco
+crud/ executa a ação no banco
 ↓
-models.py representa as tabelas usadas pelo SQLAlchemy
+models/ representa as tabelas usadas pelo SQLAlchemy
 ↓
 database.py fornece a conexão com o PostgreSQL
 ```
 
 ## Resumo
 
-- `database.py`: conecta a API ao banco;
-- `models.py`: representa as tabelas;
-- `schemas.py`: valida entrada e saída de dados;
-- `crud.py`: executa as operações no banco;
-- `main.py`: define as rotas da API.
+- `database.py`: conecta a API ao banco
+- `models/`: representa as tabelas (22 entidades)
+- `schemas/`: valida entrada e saída de dados
+- `crud/`: executa as operações no banco com validações de integridade
+- `routes/`: define as rotas da API
+- `main.py`: cria a aplicação e registra os routers
 
-A estrutura está adequada para um projeto simples com FastAPI e SQLAlchemy, principalmente por separar responsabilidades e deixar o CRUD de quartos isolado.
+A estrutura está organizada para um projeto completo com FastAPI e SQLAlchemy, separando responsabilidades por entidade e mantendo fidelidade ao minimundo, modelo lógico e normalização do projeto de Banco de Dados.

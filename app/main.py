@@ -1,76 +1,71 @@
-from fastapi import FastAPI, Depends, HTTPException
-from sqlalchemy.orm import Session
+from fastapi import FastAPI, HTTPException
 
-from app.database import get_db
-from app import crud, schemas
+from app.database import check_database_connection
+from app.routes import (
+    endereco,
+    pessoa,
+    funcionario,
+    dependente,
+    diretor,
+    gerente,
+    pessoa_operacional,
+    cozinheiro,
+    camareiro,
+    auxiliar_servicos_gerais,
+    recepcionista,
+    idioma_recepcionista,
+    reserva,
+    titular_financeiro,
+    hospede,
+    empresa,
+    pagamento,
+    categoria_quarto,
+    quarto,
+    reserva_quarto,
+    item,
+    consome,
+)
 
 app = FastAPI(
     title="API do Sistema Hoteleiro",
-    description="API criada para conectar o projeto de Banco de Dados com Python usando FastAPI e SQLAlchemy.",
-    version="1.0.0"
+    description="API FastAPI + SQLAlchemy fiel ao minimundo, modelo lógico e normalização do projeto de Banco de Dados.",
+    version="2.0.0",
 )
 
 
 @app.get("/")
 def home():
-    return {
-        "message": "API do Sistema Hoteleiro funcionando."
-    }
+    return {"message": "API do Sistema Hoteleiro funcionando."}
 
 
-# =========================
-# QUARTOS
-# =========================
-
-@app.get("/quartos", response_model=list[schemas.QuartoResponse])
-def listar_quartos(db: Session = Depends(get_db)):
-    return crud.listar_quartos(db)
-
-
-@app.get("/quartos/{numero}", response_model=schemas.QuartoResponse)
-def buscar_quarto(numero: int, db: Session = Depends(get_db)):
-    quarto = crud.buscar_quarto(db, numero)
-
-    if not quarto:
-        raise HTTPException(status_code=404, detail="Quarto não encontrado.")
-
-    return quarto
+@app.get("/health")
+def health_check():
+    try:
+        check_database_connection()
+        return {"database": "connected"}
+    except Exception as error:
+        raise HTTPException(status_code=500, detail=f"Erro na conexão com o banco: {error}")
 
 
-@app.post("/quartos", response_model=schemas.QuartoResponse)
-def criar_quarto(quarto: schemas.QuartoCreate, db: Session = Depends(get_db)):
-    novo_quarto = crud.criar_quarto(db, quarto)
-
-    if not novo_quarto:
-        raise HTTPException(
-            status_code=400,
-            detail="Categoria de quarto inexistente."
-        )
-
-    return novo_quarto
-
-
-@app.put("/quartos/{numero}", response_model=schemas.QuartoResponse)
-def atualizar_quarto(
-    numero: int,
-    dados: schemas.QuartoUpdate,
-    db: Session = Depends(get_db)
-):
-    quarto = crud.atualizar_quarto(db, numero, dados)
-
-    if not quarto:
-        raise HTTPException(status_code=404, detail="Quarto não encontrado.")
-
-    return quarto
-
-
-@app.delete("/quartos/{numero}")
-def deletar_quarto(numero: int, db: Session = Depends(get_db)):
-    quarto = crud.deletar_quarto(db, numero)
-
-    if not quarto:
-        raise HTTPException(status_code=404, detail="Quarto não encontrado.")
-
-    return {
-        "message": "Quarto removido com sucesso."
-    }
+app.include_router(endereco.router)
+app.include_router(pessoa.router)
+app.include_router(funcionario.router)
+app.include_router(dependente.router)
+app.include_router(diretor.router)
+app.include_router(gerente.router)
+app.include_router(pessoa_operacional.router)
+app.include_router(cozinheiro.router)
+app.include_router(camareiro.router)
+app.include_router(auxiliar_servicos_gerais.router)
+app.include_router(recepcionista.router)
+app.include_router(idioma_recepcionista.router)
+app.include_router(reserva.router)
+app.include_router(titular_financeiro.router)
+app.include_router(hospede.router)
+app.include_router(empresa.router)
+app.include_router(pagamento.router)
+app.include_router(categoria_quarto.router)
+app.include_router(quarto.router)
+app.include_router(reserva_quarto.router)
+app.include_router(item.router)
+app.include_router(consome.router)
