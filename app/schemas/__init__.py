@@ -1,3 +1,4 @@
+from __future__ import annotations
 from app.schemas.endereco import *
 from app.schemas.pessoa import *
 from app.schemas.funcionario import *

@@ -1,3 +1,4 @@
+from __future__ import annotations
 from fastapi import FastAPI, HTTPException
 
 from app.database import check_database_connection
